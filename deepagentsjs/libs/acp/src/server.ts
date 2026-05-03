@@ -1010,8 +1010,8 @@ export class DeepAgentsServer {
       }
       return "allow";
     } catch (err) {
-      this.log("Permission request failed:", err);
-      return "allow";
+      this.log("Permission request failed, defaulting to reject:", err);
+      return "reject";
     }
   }
 

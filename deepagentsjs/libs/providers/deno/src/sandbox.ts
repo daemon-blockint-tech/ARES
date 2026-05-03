@@ -319,11 +319,11 @@ export class DenoSandbox extends BaseSandbox {
 
     for (const [path, content] of files) {
       try {
-        // Ensure parent directory exists using spawn (more reliable than sh template)
+        // Ensure parent directory exists — use array args to avoid shell injection.
         const parentDir = path.substring(0, path.lastIndexOf("/"));
         if (parentDir) {
-          const mkdirChild = await sandbox.spawn("/bin/bash", {
-            args: ["-c", `mkdir -p "${parentDir}"`],
+          const mkdirChild = await sandbox.spawn("/bin/mkdir", {
+            args: ["-p", parentDir],
             stdout: "piped",
             stderr: "piped",
           });
@@ -369,29 +369,14 @@ export class DenoSandbox extends BaseSandbox {
 
     for (const path of paths) {
       try {
-        // Use spawn with bash to read file content (same approach as execute())
-        const child = await sandbox.spawn("/bin/bash", {
-          args: ["-c", `cat "${path}"`],
-          stdout: "piped",
-          stderr: "piped",
+        // Read file content via the sandbox filesystem API to avoid shell injection.
+        const text = await sandbox.fs.readTextFile(path);
+        const content = new TextEncoder().encode(text ?? "");
+        results.push({
+          path,
+          content,
+          error: null,
         });
-
-        const { status, stdoutText } = await child.output();
-
-        if (!status.success) {
-          results.push({
-            path,
-            content: null,
-            error: "file_not_found",
-          });
-        } else {
-          const content = new TextEncoder().encode(stdoutText ?? "");
-          results.push({
-            path,
-            content,
-            error: null,
-          });
-        }
       } catch (error) {
         results.push({
           path,

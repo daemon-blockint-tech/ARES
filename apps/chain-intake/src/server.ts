@@ -1,8 +1,8 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { timingSafeEqual } from "node:crypto";
 
 import { getPool } from "./db.js";
-import { applyBillingDeposits } from "./credits-on-deposit.js";
 import { parseWebhookBody, upsertParsedTransactions } from "./ingest.js";
 
 const webhookSecret = process.env.WEBHOOK_SHARED_SECRET?.trim();
@@ -23,17 +23,39 @@ function logError(event: string, meta: Record<string, unknown>) {
 }
 
 /**
+ * Constant-time secret comparison. Audit fix #008: the previous `===` check
+ * leaked length and prefix bits via response timing. We also no longer accept
+ * the secret via the `?secret=` query parameter, which previously leaked
+ * into access logs and proxy logs.
+ */
+function checkBearerSecret(headerValue: string | undefined, expected: string): boolean {
+  if (!headerValue?.startsWith("Bearer ")) return false;
+  const supplied = headerValue.slice(7);
+  const a = Buffer.from(supplied, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) {
+    // timingSafeEqual throws on length mismatch; equalize first.
+    return timingSafeEqual(b, b) && false;
+  }
+  return timingSafeEqual(a, b);
+}
+
+/**
  * Helius Enhanced / Raw webhooks POST a JSON array of transactions.
+ *
+ * Note (audit #002): bundle-credit attribution from on-chain memos is no
+ * longer applied here. Public-web billing is handled by mppx in apps/web,
+ * which settles each /api/chat or /api/scan request inline. This webhook
+ * only persists parsed transactions for analytics, scan-target discovery,
+ * and trigger evaluation.
+ *
  * @see https://www.helius.dev/docs/webhooks
  */
 app.post("/webhooks/helius", async (c) => {
   const requestId = c.req.header("x-request-id") || crypto.randomUUID();
   const secret = webhookSecret;
   if (secret) {
-    const auth = c.req.header("authorization");
-    const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : undefined;
-    const q = c.req.query("secret");
-    if (bearer !== secret && q !== secret) {
+    if (!checkBearerSecret(c.req.header("authorization"), secret)) {
       return c.json({ error: "unauthorized" }, 401);
     }
   }
@@ -59,17 +81,6 @@ app.post("/webhooks/helius", async (c) => {
     const { inserted, skipped, triggersInserted, triggerCounts } =
       await upsertParsedTransactions(client, txs, "webhook");
 
-    let billingCredited = 0;
-    let billingSkipped = 0;
-    try {
-      const depositResult = await applyBillingDeposits(client, txs);
-      billingCredited = depositResult.credited;
-      billingSkipped = depositResult.skipped;
-    } catch (billingErr) {
-      const msg = billingErr instanceof Error ? billingErr.message : String(billingErr);
-      logError("billing_deposit_failed", { requestId, message: msg });
-    }
-
     logInfo("webhook_ingested", {
       requestId,
       received: txs.length,
@@ -86,10 +97,6 @@ app.post("/webhooks/helius", async (c) => {
       triggers: {
         inserted: triggersInserted,
         counts: triggerCounts,
-      },
-      billing_deposits: {
-        credited: billingCredited,
-        skipped: billingSkipped,
       },
     });
   } catch (error) {

@@ -1,3 +1,15 @@
+/**
+ * Read-only credit ledger helpers.
+ *
+ * Write paths (`insertDebitPending`, `settleDebit`, `refundDebit`) were
+ * removed in audit fix #004 — payments are now settled inline by mppx
+ * before the route handler runs, so there is no pending-debit state.
+ *
+ * The dashboard `/dashboard/billing` and `/api/auth/me` still surface a
+ * historical balance and ledger view for wallets that earned credits via
+ * the legacy bundle flow. Future entries can be added by an admin tool
+ * (manual grants, support credits) but are not generated automatically.
+ */
 import type pg from "pg";
 
 export async function upsertWalletFree(pool: pg.Pool, address: string): Promise<void> {
@@ -19,36 +31,6 @@ export async function getBalanceUnits(pool: pg.Pool, wallet: string): Promise<nu
   );
   const row = r.rows[0];
   return row?.bal ? Number.parseInt(row.bal, 10) : 0;
-}
-
-export async function insertDebitPending(params: {
-  pool: pg.Pool;
-  wallet: string;
-  units: number;
-  reason: string;
-  relatedRunId?: string;
-}): Promise<number> {
-  const r = await params.pool.query<{ id: string }>(
-    `INSERT INTO credits_ledger (wallet, direction, units, reason, status, related_run_id, meta)
-     VALUES ($1, 'DEBIT', $2, $3, 'PENDING', $4, '{}'::jsonb)
-     RETURNING id`,
-    [params.wallet, params.units, params.reason, params.relatedRunId ?? null],
-  );
-  return Number.parseInt(r.rows[0]?.id ?? "0", 10);
-}
-
-export async function settleDebit(pool: pg.Pool, id: number): Promise<void> {
-  await pool.query(
-    `UPDATE credits_ledger SET status = 'SETTLED', settled_at = now() WHERE id = $1 AND status = 'PENDING'`,
-    [id],
-  );
-}
-
-export async function refundDebit(pool: pg.Pool, id: number): Promise<void> {
-  await pool.query(
-    `UPDATE credits_ledger SET status = 'REFUNDED', settled_at = now() WHERE id = $1 AND status = 'PENDING'`,
-    [id],
-  );
 }
 
 export async function ledgerHistory(

@@ -1,4 +1,21 @@
-import { createPublicOrchestrator } from "@/lib/engine-factory";
+/**
+ * /api/scan — pay-per-run security scan.
+ *
+ * Identity-then-pay:
+ *   1. authenticateIngress + IP rate limit
+ *   2. operator key bypass (internal automation)
+ *   3. SIWS session required for non-operator (anonymous scans are NOT free)
+ *   4. wallet rate limit
+ *   5. consume "free scan per month" wallet quota — if available, run for free
+ *   6. else: mppx.charge({ amount: $0.10 }) — one-time payment, all 5 methods
+ *
+ * The scan itself runs as a background promise; we return `queued` once
+ * payment settles and the run kicks off. Audit finding #004 (race between
+ * 200 and actual scan completion) is no longer a billing concern because
+ * mppx settles BEFORE this code runs — the only remaining concern is
+ * operational (a scan starts and crashes mid-run), which is logged and
+ * eligible for manual refund. That's acceptable for the price point.
+ */
 import {
   apiError,
   apiSuccess,
@@ -7,76 +24,90 @@ import {
   getClientIp,
 } from "@/lib/api";
 import { readWalletSession } from "@/lib/auth/read-session";
-import {
-  getBalanceUnits,
-  insertDebitPending,
-  refundDebit,
-  settleDebit,
-} from "@/lib/billing/ledger";
-import { ACTION_COST_UNITS } from "@/lib/billing/pricing";
 import { consumeWalletFreeScan } from "@/lib/billing/quota";
 import { getPool } from "@/lib/db/pool";
+import { createPublicOrchestrator, sanitizeModelOption } from "@/lib/engine-factory";
+import { getMppx, scanPaymentEntries } from "@/lib/payments/mppx";
 import { enforceWalletRateLimit } from "@/lib/ratelimit/wallet";
+
+interface ScanBody {
+  target?: unknown;
+  model?: unknown;
+}
+
+const TARGET_MAX_LEN = 256;
+// Conservative: only allow paths or simple identifiers. No URLs, no shell
+// metachars. Matches the docs' assumption that `target` is a workspace-relative
+// path or "." for the whole repo.
+const TARGET_RE = /^[A-Za-z0-9_./@-]+$/;
+
+function validateTarget(raw: string | undefined): string | null {
+  if (raw === undefined) return ".";
+  if (raw.length === 0 || raw.length > TARGET_MAX_LEN) return null;
+  if (!TARGET_RE.test(raw)) return null;
+  // No path traversal — allow ./ but block ../
+  if (raw.includes("..")) return null;
+  return raw;
+}
+
+function fireAndForgetScan(target: string, model: string | undefined): void {
+  // Intentional fire-and-forget. Scan progress is observable via the engine's
+  // own status callback in dev and via downstream telemetry in prod.
+  const ares = createPublicOrchestrator({ model });
+  ares
+    .runFullScan((agent: string, status: string) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[scan ${target}] ${agent}: ${status}`);
+      }
+    })
+    .catch((err) => {
+      console.error("[/api/scan] background scan failed:", err);
+    });
+}
 
 export async function POST(req: Request) {
   const ingress = authenticateIngress(req);
   if (!ingress.ok) return ingress.response;
   const { requestId, operator } = ingress;
 
-  const rate = enforceRateLimit(req, requestId, operator ? "op:scan" : "pub:scan", operator ? 60 : 10);
+  const rate = enforceRateLimit(
+    req,
+    requestId,
+    operator ? "op:scan" : "pub:scan",
+    operator ? 60 : 10,
+  );
   if (!rate.ok) return rate.response;
 
-  let body: unknown;
+  let body: ScanBody;
   try {
-    body = await req.json();
+    body = (await req.json()) as ScanBody;
   } catch {
     return apiError(requestId, "BAD_REQUEST", "JSON body required.", 400);
   }
 
-  const target =
-    typeof (body as { target?: unknown })?.target === "string"
-      ? (body as { target: string }).target
-      : ".";
-  const model =
-    typeof (body as { model?: unknown })?.model === "string"
-      ? (body as { model: string }).model
-      : undefined;
+  const targetRaw = typeof body.target === "string" ? body.target : undefined;
+  const target = validateTarget(targetRaw);
+  if (target === null) {
+    return apiError(
+      requestId,
+      "BAD_REQUEST",
+      "Invalid `target`: expected a workspace-relative path or '.' (no '..', no shell metachars, ≤256 chars).",
+      400,
+    );
+  }
+
+  const model = sanitizeModelOption(typeof body.model === "string" ? body.model : undefined);
 
   const ip = getClientIp(req);
 
-  async function invokeScan(): Promise<Response> {
-    try {
-      const ares = createPublicOrchestrator({ model });
-
-      ares.runFullScan((agent, status) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.log(`[scan] ${agent}: ${status}`);
-        }
-      }).catch((err) => {
-        console.error("[ARES Scan Error]:", err);
-      });
-
-      return apiSuccess(requestId, {
-        status: "queued",
-        message: "Security scan initiated successfully.",
-        target,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.error("API Scan Route Error:", error);
-      return apiError(
-        requestId,
-        "INTERNAL_ERROR",
-        "Failed to initiate ARES scan.",
-        500,
-        msg || "Unknown execution error",
-      );
-    }
-  }
-
   if (operator) {
-    return invokeScan();
+    fireAndForgetScan(target, model);
+    return apiSuccess(requestId, {
+      status: "queued",
+      target,
+      timestamp: new Date().toISOString(),
+      billing: "operator",
+    });
   }
 
   const session = await readWalletSession(req);
@@ -84,7 +115,7 @@ export async function POST(req: Request) {
     return apiError(
       requestId,
       "FORBIDDEN",
-      "Scans require a Solana wallet session. Anonymous preview is chat-only.",
+      "Scans require a Solana wallet session. Sign in via /api/auth/challenge first.",
       403,
     );
   }
@@ -100,49 +131,46 @@ export async function POST(req: Request) {
   }
 
   const pool = getPool();
-  if (!pool) {
+
+  // Try free monthly quota first — paid customers and free-tier alike.
+  const freeOk = await consumeWalletFreeScan(pool, session.sub, ip);
+  if (freeOk) {
+    fireAndForgetScan(target, model);
+    return apiSuccess(requestId, {
+      status: "queued",
+      target,
+      timestamp: new Date().toISOString(),
+      billing: "free_wallet",
+    });
+  }
+
+  // Free quota exhausted → mppx multi-method charge gate. Each registered
+  // method (Tempo, Stripe, Lightning, Solana) is presented as a parallel
+  // 402 offer; the client picks whichever rail it can pay.
+  const { mppx } = getMppx();
+  const entries = scanPaymentEntries();
+  if (entries.length === 0) {
+    // Dev mode with no payment env configured — surface a clear error
+    // rather than crashing inside Mppx.compose.
     return apiError(
       requestId,
       "INTERNAL_ERROR",
-      "DATABASE_URL is required for wallet-based scans.",
+      "No payment methods configured. Set ASST_TEMPO_RECIPIENT, STRIPE_SECRET_KEY, LIGHTNING_MNEMONIC, or ASST_SOLANA_RECIPIENT.",
       503,
     );
   }
+  const result = await mppx.compose(...entries)(req);
 
-  const wallet = session.sub;
-  const balance = await getBalanceUnits(pool, wallet);
-
-  if (balance >= ACTION_COST_UNITS.scan) {
-    let debitId: number | undefined;
-    try {
-      debitId = await insertDebitPending({
-        pool,
-        wallet,
-        units: ACTION_COST_UNITS.scan,
-        reason: "scan",
-      });
-      const res = await invokeScan();
-      if (res.status === 200 && debitId !== undefined) {
-        await settleDebit(pool, debitId);
-      } else if (debitId !== undefined) {
-        await refundDebit(pool, debitId);
-      }
-      return res;
-    } catch (error: unknown) {
-      if (debitId !== undefined) await refundDebit(pool, debitId);
-      throw error;
-    }
+  if (result.status === 402) {
+    return result.challenge;
   }
 
-  const okQuota = await consumeWalletFreeScan(pool, wallet, ip);
-  if (!okQuota) {
-    return apiError(
-      requestId,
-      "RATE_LIMITED",
-      "Free-tier scan quota exceeded. Top up credits or wait until next month.",
-      429,
-    );
-  }
-
-  return invokeScan();
+  fireAndForgetScan(target, model);
+  const ok = apiSuccess(requestId, {
+    status: "queued",
+    target,
+    timestamp: new Date().toISOString(),
+    billing: "mppx_charge",
+  });
+  return result.withReceipt(ok);
 }

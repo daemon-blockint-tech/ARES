@@ -30,13 +30,22 @@ export default function TargetsPage() {
 
         // Infer targets from manifest and findings
         const manifest = findingsData.manifest || {};
+        const overallRaw = data?.overall;
+        const overall =
+          typeof overallRaw === "number" && Number.isFinite(overallRaw)
+            ? Math.max(0, Math.min(100, overallRaw))
+            : undefined;
+        const riskScore =
+          overall !== undefined
+            ? Math.max(0, Math.min(100, Math.round(100 - overall)))
+            : 0;
         const baseTarget = {
-          id: manifest.repoRoot ? manifest.repoRoot.split('\\').pop() : 'primary-repo',
-          name: manifest.repoRoot ? manifest.repoRoot.split('\\').pop() : 'ARES Workspace',
-          type: 'repo',
-          status: data.overall > 80 ? 'protected' : 'monitoring',
-          riskScore: 100 - data.overall,
-          owner: 'System'
+          id: manifest.repoRoot ? manifest.repoRoot.split("\\").pop() : "primary-repo",
+          name: manifest.repoRoot ? manifest.repoRoot.split("\\").pop() : "ARES Workspace",
+          type: "repo",
+          status: overall !== undefined && overall > 80 ? "protected" : "monitoring",
+          riskScore,
+          owner: "System",
         };
 
         // Add some inferred targets from findings files
@@ -112,7 +121,9 @@ export default function TargetsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredTargets.map((target) => (
+              {filteredTargets.map((target) => {
+                const riskScore = normalizeRiskScore(target.riskScore);
+                return (
                 <tr key={target.id} className="group hover:bg-secondary/10 transition-colors">
                   <td className="px-8 py-6">
                     <div className="flex items-center gap-4">
@@ -137,12 +148,12 @@ export default function TargetsPage() {
                           <div 
                             className={cn(
                               "h-full transition-all duration-1000",
-                              target.riskScore < 20 ? "bg-emerald-500" : target.riskScore < 60 ? "bg-primary" : "bg-destructive"
+                              riskScore < 20 ? "bg-emerald-500" : riskScore < 60 ? "bg-primary" : "bg-destructive"
                             )} 
-                            style={{ width: `${target.riskScore}%` }} 
+                            style={{ width: `${riskScore}%` }} 
                           />
                        </div>
-                       <span className="font-serif font-medium w-6 text-right leading-none">{target.riskScore}</span>
+                       <span className="font-serif font-medium w-6 text-right leading-none tabular-nums">{riskScore}</span>
                      </div>
                   </td>
                   <td className="px-8 py-6">
@@ -159,13 +170,20 @@ export default function TargetsPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
       </div>
     </div>
   );
+}
+
+/** 0–100 integer for progress + display; never NaN (avoids React child warning). */
+function normalizeRiskScore(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
 
 function TargetTypeIcon({ type }: { type: string }) {

