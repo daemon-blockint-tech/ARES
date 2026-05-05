@@ -1,0 +1,5 @@
+# Local override: don't publish redis port (host 6379 is already in use by another stack).
+# Agent containers still reach redis via the internal docker network as `redis:6379`.
+services:
+  redis:
+    ports: !override []

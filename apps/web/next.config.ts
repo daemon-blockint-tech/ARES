@@ -36,32 +36,13 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingRoot: path.resolve(__dirname, "..", ".."),
   /**
-   * Native-module bailouts. Next.js's webpack bundler cannot load these
-   * at runtime on the server — leaving the default import silently
-   * `undefined`. Listing them here tells Next to require() them at
-   * runtime like plain Node.js does.
-   *
-   * - `better-sqlite3`: used by @ares/engine's persistence layer.
-   * - `pg`, `pg-native`: used by @ares/chain-intake (safe to list here
-   *   even though the web app doesn't import chain-intake directly — it
-   *   transitively reaches it via @ares/engine in some dev paths).
+   * Native-module bailouts for server-only deps (e.g. `pg` from optional
+   * dashboard paths). Agent orchestration runs in `apps/agent-py`.
    */
-  serverExternalPackages: ["better-sqlite3", "pg", "pg-native"],
-  /**
-   * Belt-and-braces: even though `better-sqlite3` is in Next's default
-   * `serverExternalPackages` list, when we import it transitively via the
-   * workspace package `@ares/engine`, webpack can still try to bundle
-   * the native binding — which leaves the `Database` constructor broken
-   * at runtime ("Cannot read properties of undefined (reading 'indexOf')"
-   * inside `new Database()`). Forcing `commonjs` externalization for the
-   * server build makes webpack emit a plain `require("better-sqlite3")`.
-   *
-   * Context: https://github.com/vercel/next.js/issues/47327
-   */
+  serverExternalPackages: ["pg", "pg-native"],
   webpack: (config, { isServer }) => {
     if (isServer) {
       const nativeExternals = {
-        "better-sqlite3": "commonjs better-sqlite3",
         pg: "commonjs pg",
         "pg-native": "commonjs pg-native",
       };

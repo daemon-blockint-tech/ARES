@@ -2,74 +2,58 @@
 
 **Version 0.3** · canonical system design for the multi-agent stack.
 
-> Short version: one engine, many surfaces. Read
-> [`packages/engine/README.md`](./packages/engine/README.md) for the public
-> API and [`docs/REPO_MAP.md`](./docs/REPO_MAP.md) for full directory
-> navigation.
+> Short version: **apps/agent-py** is the orchestration plane; Next.js is a
+> thin HTTP surface. Read [`apps/agent-py/README.md`](./apps/agent-py/README.md)
+> and [`docs/REPO_MAP.md`](./docs/REPO_MAP.md) for navigation.
 
 ## 1. System diagram
 
 ```
                                ┌───────────────────────────────────────┐
-                               │           @ares/engine                │
-                               │                                       │
-  repoRoot  ─────────────────▶ │  Orchestrator                         │
-  model id  ─────────────────▶ │    ├── createModel()  (model-factory) │
-  skills    ◀──── loader  ──── │    ├── 6 sub-agents (SubAgent class)  │
-                               │    │    ├── Solana Vulnerability       │
-                               │    │    ├── DeFi Security              │
-                               │    │    ├── Rug Pull Detector          │
-                               │    │    ├── Secret Hygiene             │
-                               │    │    ├── Supply Chain               │
-                               │    │    └── Report Synthesizer         │
-                               │    ├── tools/readonly.ts               │
-                               │    ├── tools/mutating.ts (HITL-gated)  │
-                               │    │     └── SandboxBackend ───────────┼──▶ host / docker
-                               │    │         (sandbox/*)               │     / deepagents
-                               │    └── assurance-tools/*               │     (Daytona, Modal,
-                               │         (Semgrep, SARIF merge,         │      node-vfs, …)
-                               │          Solana RPC, program scanners) │
-                               │                                       │
-                               │  ASSTPersistenceSQLite  ─── .asst/    │
+                               │           apps/agent-py               │
+                               │  Hermes plugin · LiteLLM · FastAPI    │
+                               │  Arq worker · assurance + KB tools    │
+                               │  JSONL history under <repo>/.asst/    │
                                └───────────────────────────────────────┘
                                                 ▲
            ┌───────────────────────┬────────────┴────────────┬──────────────────────┐
            │                       │                         │                      │
-    ┌────────────┐          ┌────────────┐           ┌────────────┐          ┌────────────┐
-    │ @asst/cli  │          │ @asst/web  │           │@asst/mcp-  │          │@asst/chain-│
-    │            │          │            │           │ server     │          │ intake     │
-    │ Interactive│          │ Next.js    │           │ stdio MCP  │          │ Helius → PG│
-    │ TUI + HITL │          │ dashboard  │           │ for Cursor │          │ → manifest │
-    │ prompts    │          │ + public   │           │ / Claude   │          │            │
-    └────────────┘          │ /api/*     │           └────────────┘          └────────────┘
-                            │ (readonly  │
-                            │ by default)│
-                            └────────────┘
+    ┌────────────┐          ┌────────────┐                                        ┌────────────┐
+    │ operators  │          │ @asst/web  │                                        │@asst/chain-│
+    │ scripts/CI │          │ Next.js    │                                        │ intake     │
+    │            │          │ /api/*     │                                        │ Helius → PG│
+    │            │          │ proxies    │                                        │ → manifest │
+    └────────────┘          └────────────┘                                        └────────────┘
 ```
 
 ## 2. Boundaries
 
-- **Engine** (`@ares/engine`) holds 100% of agent/tool logic. Apps are thin.
-- **Tools** are split:
-  - `tools/readonly.ts` — safe everywhere (web, MCP, CLI).
-  - `tools/mutating.ts` — produced by a factory that takes a `permissionFn`
-    callback. No mutation happens without a yes from the host.
-  - `assurance-tools/*` — deterministic program/supply-chain analyzers;
-    side-effect-bounded (some call out to `semgrep`, Solana RPC, git).
-- **Model** is never hardcoded. `createModel("<provider>:<model>")` is the
-  single entry point; supports Gemini, OpenRouter, OpenAI-compatible,
-  Ollama, and `local:` LM-Studio-style endpoints.
+- **`apps/agent-py`** holds orchestration, Hermes tool registration, KB
+  integration, and scan workers. **`apps/web`** stays billing/auth/UI and
+  signs JSON bodies to the Python service.
+- **Tools** are Python async functions registered on the Hermes plugin
+  (`ares_plugin/tools/*`). Read-only vs mutating behavior follows the same
+  product rules as before (`ASST_ALLOW_WRITE`, `ASST_WEB_ALLOW_WRITE`).
+- **Models** route through LiteLLM using `provider:model` ids (see
+  `ares_plugin/llm.py`).
+
+### 2.1 Phase 0 defaults (migration plan)
+
+- **Queue:** Arq (Redis) · **HTTP:** FastAPI · **Python env:** uv (`Makefile` targets `py-dev`, `py-test`, `py-build`).
+- **Hermes:** consumed as a **plugin bundle** (`ares_plugin` entry point); upstream pin is the git tag declared in `apps/agent-py/pyproject.toml` (release lineage maps to Hermes `0.12.x` metadata).
+- **Default LLM:** operators set `ASST_ORCHESTRATOR_MODEL` / provider keys; LiteLLM resolves providers (`ares_plugin/llm.py`).
+- **KB Track A:** Supabase + pgvector; optional Track B (DPO/RL) is gated on feedback volume — see `docs/runbooks/phase-10b-rl-dpo.md`.
 
 ## 3. Data flow — deterministic full scan
 
 ```
- user ──▶ CLI/web/MCP ──▶ Orchestrator.runFullScan(repoRoot)
+ user ──▶ web ──▶ POST /v1/scan ──▶ Arq worker ──▶ AresOrchestrator.run_full_scan
                                     │
                                     ├─ runs each sub-agent in order
                                     │    (each agent uses its skill-filtered
                                     │     system prompt + readonly tools)
                                     │
-                                    ├─ writes transcripts to .asst/asst.db
+                                    ├─ writes transcripts to .asst/*.jsonl
                                     │
                                     └─▶ returns FullScanResult
                                           └─ persisted SARIF + JSON under
@@ -79,73 +63,50 @@
 ## 4. Data flow — interactive chat
 
 ```
- user prompt ──▶ Orchestrator.chat(prompt)
+ user prompt ──▶ POST /v1/chat ──▶ AresOrchestrator.chat
                        │
-                       ├─ loads recent history from sqlite
+                       ├─ loads recent history from JSONL
                        ├─ calls LLM with system prompt + sub-agent registry
-                       ├─ LLM emits tool call → `delegate_to_sub_agent`
-                       ├─ sub-agent runs (readonly tools only by default)
-                       └─ returns streamed messages; persisted
+                       ├─ delegates to sub-agents (Hermes / LiteLLM tool loop)
+                       └─ returns reply text; persisted under .asst/
 ```
 
 ## 5. Security model
 
-- **Public surface** = web, MCP. Both get read-only tools only.
-- **Trusted surface** = CLI (local dev). Mutating tools gated by
-  `globalThis.ARES_ASK_PERMISSION` (interactive confirm).
+- **Public surface** = web → agent-py. Default posture is read-only tools.
+- **Trusted operators** enable mutating tools only with explicit env + policy.
 - **ASST_ALLOW_WRITE=0** forces refusal regardless of the permission hook.
 - **ASST_WEB_ALLOW_WRITE=1** is the explicit opt-in for trusted private
   deployments (e.g. a CI runner for your own repo).
 
 ### 5.1 Sandbox backends
 
-Mutating tools don't run commands directly — they go through a
-`SandboxBackend` produced by `createSandbox()`. The default backend
-(`host`) preserves the legacy "execa on the host" behavior; production /
-multi-tenant deployments should switch to `docker` (throwaway container
-per command, `--network none` by default) or adapt a deepagents provider
-(Daytona, Modal, Deno, node-vfs, QuickJS) with `adaptDeepAgentsSandbox`.
-
-```ts
-import { createSandbox, createMutatingTools } from "@ares/engine";
-
-const sandbox = await createSandbox();            // honors ASST_SANDBOX_BACKEND
-const tools   = createMutatingTools({ sandbox, askPermission });
-```
-
-See [`packages/engine/src/sandbox/README.md`](./packages/engine/src/sandbox/README.md)
-for the full backend matrix and env knobs
-(`ASST_SANDBOX_BACKEND`, `ASST_SANDBOX_DOCKER_*`, `ASST_CMD_*`).
+Mutating tools should run inside **Docker** (per-scan isolation) in
+production. The Python port mirrors the same env knobs
+(`ASST_SANDBOX_BACKEND`, `ASST_SANDBOX_DOCKER_*`, `ASST_CMD_*`) — see
+`apps/agent-py/README.md` for the current matrix.
 
 ## 6. Persistence
 
-SQLite file at `<repoRoot>/.asst/asst.db` (WAL mode). Tables:
-
-| Table                  | Rows                                                      |
-| ---------------------- | --------------------------------------------------------- |
-| `chat_messages`        | Chat history per session (role, content, ts, meta)        |
-| `scan_results`         | Full scan output + metadata                               |
-| `scan_targets`         | Repos/paths being tracked                                 |
-| `agent_runs`           | Individual sub-agent invocations + token counts           |
-| `findings`             | (structured findings — pending B1 in todo)                |
-
-Legacy lowdb JSON is migrated on first run by `ASSTPersistenceSQLite`.
+Chat transcripts and operator-visible artifacts live under
+`<repoRoot>/.asst/` (JSONL + `last-scan.json` + `runs/<run_id>.json` for queued
+Arq scans). Supabase (optional) stores KB rows, `kb_feedback`, and
+`kb_retrieval_logs`.
 
 ## 7. Skills
 
 - Canonical location: `.agents/skills/<skill-name>/SKILL.md`.
-- Loaded by `packages/engine/src/skills/loader.ts` on agent boot.
+- Loaded by the Python orchestrator on agent boot (Hermes skills middleware
+  where configured).
 - Each sub-agent filters skills relevant to its role.
 - **Planned** (B2): TF-IDF retrieval to keep context budgets small.
 
 ## 8. Extensibility
 
-- **New assurance tool** → drop in `packages/engine/src/assurance-tools/`,
-  export from `assurance-tools/index.ts`. Available everywhere immediately
-  (CLI, web API, MCP by registering in `apps/mcp-server/src/server.ts`).
-- **New sub-agent** → add to `SUB_AGENT_CONFIGS` in `sub-agents.ts`.
-- **New surface** → depend on `@ares/engine`, use `createPublicOrchestrator`
-  if the surface is reachable by untrusted users.
+- **New assurance tool** → implement in `apps/agent-py/src/ares_plugin/tools/`
+  and register via the Hermes plugin.
+- **New sub-agent** → extend `ares_plugin/sub_agents.py` + orchestrator routing.
+- **New HTTP surface** → prefer `apps/web` route proxies with HMAC to `agent-py`.
 
 ## 9. Related documents
 

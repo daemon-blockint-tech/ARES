@@ -1,4 +1,4 @@
-import { SUB_AGENT_PUBLIC_LIST } from "@ares/engine/sub-agent-public-manifest";
+import { SUB_AGENT_PUBLIC_LIST } from "@/lib/sub-agent-public-manifest";
 import { apiError, apiSuccess, requireApiKeyOrPublic } from "@/lib/api";
 
 export async function GET(req: Request) {

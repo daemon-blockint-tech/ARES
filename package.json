@@ -2,16 +2,13 @@
   "name": "ares-workspace",
   "private": true,
   "scripts": {
-    "build": "pnpm -r --filter @asst/web --filter @ares/engine --filter @asst/mcp-server --filter @asst/chain-intake run build",
-    "dev": "pnpm -r --filter @asst/web --filter @asst/mcp-server --filter @asst/chain-intake run dev",
-    "lint": "pnpm -r --filter @asst/web --filter @ares/engine --filter @asst/mcp-server --filter @asst/chain-intake run lint",
-    "typecheck": "pnpm -r --filter @asst/web --filter @ares/engine --filter @asst/mcp-server --filter @asst/chain-intake run typecheck",
-    "test": "pnpm -r --filter @asst/web --filter @ares/engine --filter @asst/mcp-server --filter @asst/chain-intake run test"
+    "build": "pnpm -r --filter @asst/web --filter @asst/chain-intake run build",
+    "dev": "pnpm -r --filter @asst/web --filter @asst/chain-intake run dev",
+    "lint": "pnpm -r --filter @asst/web --filter @asst/chain-intake run lint",
+    "typecheck": "pnpm -r --filter @asst/web --filter @asst/chain-intake run typecheck",
+    "test": "pnpm -r --filter @asst/web --filter @asst/chain-intake run test"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3"
-    ],
     "ignoredBuiltDependencies": [
       "core-js",
       "esbuild",

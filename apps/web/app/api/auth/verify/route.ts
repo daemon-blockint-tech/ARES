@@ -34,11 +34,10 @@ export async function POST(req: Request) {
       return apiError(requestId, "BAD_REQUEST", "Nonce missing from signed message.", 400);
     }
 
-    const consumed = await createNonceStore().consume(nonce);
-    if (!consumed) {
-      return apiError(requestId, "BAD_REQUEST", "Invalid or reused nonce.", 400);
-    }
-
+    // Verify signature BEFORE consuming the nonce so a malformed/wrong
+    // signature attempt does not burn an otherwise-valid challenge — better
+    // UX without weakening replay protection (the nonce TTL is still ≤5 min
+    // and a valid sig requires the wallet's private key).
     const sigOk = verifyEd25519WalletSignature({
       walletAddressBase58: address,
       messageUtf8: signedMessage,
@@ -48,18 +47,29 @@ export async function POST(req: Request) {
       return apiError(requestId, "UNAUTHORIZED", "Signature verification failed.", 401);
     }
 
-    const pool = getPool();
-    if (!pool) {
-      return apiError(
-        requestId,
-        "INTERNAL_ERROR",
-        "DATABASE_URL is required for wallet sign-in.",
-        503,
-      );
+    const consumed = await createNonceStore().consume(nonce);
+    if (!consumed) {
+      return apiError(requestId, "BAD_REQUEST", "Invalid or reused nonce.", 400);
     }
 
-    await upsertWalletFree(pool, address);
-    const balanceUnits = await getBalanceUnits(pool, address);
+    // The credits ledger (Postgres) is optional infrastructure. SIWS identity
+    // does not depend on it — without DATABASE_URL we still mint a session,
+    // we just default to tier=free / balanceUnits=0.
+    const pool = getPool();
+    let balanceUnits = 0;
+    if (pool) {
+      try {
+        await upsertWalletFree(pool, address);
+        balanceUnits = await getBalanceUnits(pool, address);
+      } catch (dbErr) {
+        // Ledger unavailable (schema not migrated, transient outage). Don't
+        // block sign-in; the user can still authenticate and use free-tier.
+        console.warn(
+          "[auth/verify] ledger unavailable, signing in as free-tier",
+          dbErr,
+        );
+      }
+    }
     const tier: "free" | "paid" = balanceUnits > 0 ? "paid" : "free";
 
     const ttlDays = Number.parseInt(process.env.ASST_SESSION_TTL_DAYS?.trim() || "30", 10);
@@ -68,7 +78,7 @@ export async function POST(req: Request) {
       return apiError(
         requestId,
         "INTERNAL_ERROR",
-        "ASST_SESSION_SECRET is not configured.",
+        "Sign-in is not configured: set ASST_SESSION_SECRET (64 hex chars).",
         500,
       );
     }

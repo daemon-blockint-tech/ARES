@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ares-agent-py"
+version = "0.1.0"
+description = "ARES Python agent service (Hermes plugin + FastAPI + KB)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+  "httpx>=0.28,<1",
+  "litellm>=1.60,<2",
+  "pydantic>=2.12,<3",
+  "pydantic-settings>=2.7,<3",
+  "redis>=5.2,<6",
+  "arq>=0.26,<1",
+  "prometheus-client>=0.21,<1",
+  "python-multipart>=0.0.20,<1",
+  "supabase>=2.11,<3",
+  # Hermes release tag v2026.4.30 ships pyproject version 0.12.0 (no git tag v0.12.0).
+  "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git@v2026.4.30",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.25", "ruff>=0.9", "mypy>=1.14"]
+
+# Installed by default on `uv sync` (unlike optional extras); keeps `uv run mypy` working.
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.25",
+  "ruff>=0.9",
+  "mypy>=1.14",
+]
+
+[project.scripts]
+ares-agent-api = "ares_plugin.api.main:run"
+
+[project.entry-points."hermes_agent.plugins"]
+ares = "ares_plugin.plugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["ares_plugin"]
+ignore_missing_imports = true

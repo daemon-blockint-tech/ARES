@@ -31,8 +31,9 @@ import {
 } from "@/lib/api";
 import { readWalletSession } from "@/lib/auth/read-session";
 import { consumeAnonChatQuota, consumeWalletFreeChat } from "@/lib/billing/quota";
+import { agentPyPostJson, defaultRepoPayload } from "@/lib/agentpy-client";
 import { getPool } from "@/lib/db/pool";
-import { createPublicOrchestrator, sanitizeModelOption } from "@/lib/engine-factory";
+import { sanitizeModelOption } from "@/lib/auth/sanitize-model";
 import { chatPaymentEntries, getMppx } from "@/lib/payments/mppx";
 import { enforceWalletRateLimit } from "@/lib/ratelimit/wallet";
 
@@ -42,8 +43,12 @@ interface ChatBody {
 }
 
 async function runChat(prompt: string, model: string | undefined): Promise<unknown> {
-  const ares = createPublicOrchestrator({ model });
-  return ares.chat(prompt);
+  const res = await agentPyPostJson<{ reply: string }>("/v1/chat", {
+    prompt,
+    model,
+    ...defaultRepoPayload(),
+  });
+  return res.reply;
 }
 
 export async function POST(req: Request) {

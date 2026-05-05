@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ares/engine": "file:../../../packages/engine",
     "@langchain/core": "^1.1.41",
     "@langchain/google-genai": "^2.1.26",
     "deepagents": "workspace:*",

@@ -1,0 +1,45 @@
+name: Agent Py CI
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "apps/agent-py/**"
+      - ".github/workflows/agent-py-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/agent-py/**"
+      - ".github/workflows/agent-py-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-py:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/agent-py
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/setup-python@e4679fc76f54a49a6750fcfa4a9b496e72a96b27 # v6.0.0
+        with:
+          python-version: "3.12"
+      - name: Install project + dev
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -e ".[dev]"
+      - name: Ruff
+        run: .venv/bin/ruff check src tests
+      - name: Mypy
+        run: .venv/bin/mypy src --ignore-missing-imports
+      - name: Pytest
+        run: .venv/bin/pytest -q
+      - name: Docker build
+        run: docker build -t ares-agent-py:ci .

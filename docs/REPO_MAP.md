@@ -4,17 +4,17 @@ Every top-level directory, in one place, with a one-line description and a
 pointer to its own `README.md` when one exists.
 
 > **If you're new here, read this file first, then `ARCHITECTURE.md`, then
-> `packages/engine/README.md`.**
+> `apps/agent-py/README.md`.**
 
 ```
 ASST/
-├── apps/                        Deployable surfaces (web, MCP, chain intake)
+├── apps/                        Deployable surfaces (web, agent-py, chain intake)
 │   ├── web/                     @asst/web — Next.js dashboard + public API
-│   ├── mcp-server/              @asst/mcp-server — MCP stdio server for Cursor / Claude
+│   ├── agent-py/                Python Hermes plugin + FastAPI + Arq worker
 │   └── chain-intake/            @asst/chain-intake — Helius → Postgres → manifest
 │
 ├── packages/                    Reusable libraries (workspace:*)
-│   └── engine/                  @ares/engine — multi-agent orchestrator + tools
+│   └── sdk/                     @ares/sdk — `ares` CLI + TypeScript client (public `/api/*`)
 │
 ├── deepagentsjs/                Vendored LangGraph engine + examples (pattern reference)
 │   ├── libs/                    deepagents core, providers, graph backends
@@ -22,7 +22,7 @@ ASST/
 │   └── …                        See deepagentsjs/README.md
 │
 ├── docs/                        PRD, dashboard UX notes, narrative docs (EN + ID)
-├── .agents/skills/              CANONICAL skills directory. Loaded by @ares/engine.
+├── .agents/skills/              CANONICAL skills directory (loaded by agent-py orchestrator).
 ├── scripts/                     Ad-hoc automation (Colosseum Copilot scan, etc.)
 ├── analysis/                    Optional positioning / revenue-forecast notebooks
 ├── assurance/                   (gitignored) generated run manifests & SARIF output
@@ -47,16 +47,17 @@ ASST/
 
 | Question                                                     | Answer                                                   |
 | ------------------------------------------------------------ | -------------------------------------------------------- |
-| "Where is the orchestrator?"                                 | `packages/engine/src/orchestrator.ts`                    |
-| "Where are the 6 sub-agents defined?"                        | `packages/engine/src/sub-agents.ts`                      |
-| "Where do I add a new assurance tool?"                       | `packages/engine/src/assurance-tools/` (+ update index)  |
-| "Where are the read-only vs mutating tools?"                 | `packages/engine/src/tools/readonly.ts` / `mutating.ts`  |
-| "Where is the model factory (pick Gemini/OpenRouter/Ollama)?"| `packages/engine/src/config/model-factory.ts`            |
-| "Where do skills get loaded from?"                           | `packages/engine/src/skills/loader.ts` → `.agents/skills`|
-| "Where is the SQLite schema?"                                | `packages/engine/src/persistence/sqlite.ts`              |
+| "Where is the orchestrator?"                                 | `apps/agent-py/src/ares_plugin/orchestrator.py`          |
+| "Where are the 6 sub-agents defined?"                        | `apps/agent-py/src/ares_plugin/sub_agents.py`            |
+| "Where do I add a new assurance tool?"                       | `apps/agent-py/src/ares_plugin/tools/assurance.py`       |
+| "Where are KB tools?"                                        | `apps/agent-py/src/ares_plugin/tools/kb_tools.py`        |
+| "Where is the model routing (LiteLLM)?"                      | `apps/agent-py/src/ares_plugin/llm.py`                   |
+| "Where do skills get loaded from?"                           | `.agents/skills` (Hermes / filesystem middleware)        |
+| "Where is chat/scan persistence (JSONL)?"                    | `apps/agent-py/src/ares_plugin/persistence.py`          |
 | "Where is the web API for /api/chat?"                        | `apps/web/app/api/chat/route.ts`                         |
-| "Where does the web enforce read-only?"                      | `apps/web/lib/engine-factory.ts`                         |
-| "Where are the MCP tool bindings?"                           | `apps/mcp-server/src/server.ts`                          |
+| "Where is the Developer SDK / `ares` CLI?"                   | `packages/sdk/` + narrative doc `docs/SDK-CLI.md`        |
+| "Where does the web proxy to Python?"                        | `apps/web/lib/agentpy-client.ts`                         |
+| "Where is the FastAPI surface?"                              | `apps/agent-py/src/ares_plugin/api/main.py`              |
 | "Where does Helius push webhook data?"                       | `apps/chain-intake/src/server.ts`                        |
 | "Where is the assurance manifest writer?"                    | `deepagentsjs/examples/assurance-run/write-run-manifest.ts` |
 | "Where are skills authored?"                                 | `.agents/skills/<skill-name>/SKILL.md`                   |

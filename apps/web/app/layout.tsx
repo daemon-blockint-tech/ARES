@@ -1,7 +1,17 @@
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
 import { Instrument_Serif, Geist, JetBrains_Mono } from "next/font/google";
-import { ThemeProvider } from "@/components/ares/theme-provider";
+import { Suspense } from "react";
+import "@/lib/asst-allow-write";
 import "./globals.css";
+
+/** Dynamic import isolates the client theme bundle from the layout chunk (helps avoid flaky ChunkLoadError on hot reload). */
+const ThemeProvider = dynamic(
+  () =>
+    import("@/components/ares/theme-provider").then((m) => ({
+      default: m.ThemeProvider,
+    })),
+);
 
 const themeInitScript = `(() => { try {
   var k = "ares-theme", L = "ares-dashboard-theme";
@@ -52,7 +62,9 @@ export default function RootLayout({
           // Apply saved theme before paint (no flash of wrong background)
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
         />
-        <ThemeProvider>{children}</ThemeProvider>
+        <Suspense fallback={null}>
+          <ThemeProvider>{children}</ThemeProvider>
+        </Suspense>
       </body>
     </html>
   );

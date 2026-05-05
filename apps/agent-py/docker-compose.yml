@@ -1,0 +1,35 @@
+# Local dev stack for apps/agent-py (FastAPI + Redis + Arq worker).
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  agent-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8765:8765"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      AGENTPY_INTERNAL_SECRET: ${AGENTPY_INTERNAL_SECRET:-dev-insecure-change-me}
+      ASST_REPO_ROOT: ${ASST_REPO_ROOT:-/workspace}
+    volumes:
+      - ${ASST_REPO_ROOT:-../..}:/workspace:ro
+    depends_on:
+      - redis
+
+  agent-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "arq", "ares_plugin.arq_worker.WorkerSettings"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      AGENTPY_INTERNAL_SECRET: ${AGENTPY_INTERNAL_SECRET:-dev-insecure-change-me}
+      ASST_REPO_ROOT: ${ASST_REPO_ROOT:-/workspace}
+    volumes:
+      - ${ASST_REPO_ROOT:-../..}:/workspace:ro
+    depends_on:
+      - redis

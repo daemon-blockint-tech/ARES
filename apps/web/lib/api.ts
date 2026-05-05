@@ -6,6 +6,7 @@ export type ApiErrorCode =
   | "FORBIDDEN"
   | "NOT_FOUND"
   | "RATE_LIMITED"
+  | "BAD_GATEWAY"
   | "INTERNAL_ERROR";
 
 export interface ApiErrorBody {

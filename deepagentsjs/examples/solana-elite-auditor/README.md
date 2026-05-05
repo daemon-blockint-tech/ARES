@@ -4,8 +4,8 @@ This example packages **two** ways to run an “elite” Solana-oriented assuran
 
 | Entry | Command | When to use |
 |--------|---------|-------------|
-| **Orchestrator (recommended)** | `pnpm elite:orchestrator -- <repo>` | Full **multi-agent swarm** in `@ares/engine`: specialized sub-agents, pinned + retrieved skills, SARIF/manifest lanes, **PDF** via `generate_pdf_report`. |
-| **Deep Agent harness** | `pnpm elite:deep -- <repo>` | **deepagents** runtime (planning, filesystem, `task` delegation) with a curated **@ares/engine** tool belt; default model **Gemini** (`GOOGLE_API_KEY`). |
+| **Orchestrator (retired here)** | `pnpm elite:orchestrator -- <repo>` | Exits with a pointer to **`apps/agent-py`** (`POST /v1/scan`, `POST /v1/chat`) for the full multi-agent + SARIF + PDF parity path. |
+| **Deep Agent harness** | `pnpm elite:deep -- <repo>` | **deepagents** + Gemini filesystem shell for quick repo reads — **not** a substitute for the Python assurance toolbelt. |
 
 Both paths share the same **bootstrap intent** (`src/elite-bootstrap-prompt.ts`): protocol-specific Solana reasoning, evidence-first findings, and explicit handoff to reporting/PDF when data exists.
 
@@ -27,7 +27,7 @@ pnpm install
 pnpm --filter @asst/solana-elite-auditor elite:orchestrator -- /path/to/anchor/repo
 ```
 
-**Orchestrator env:** configure models per `packages/engine` (`ASST_ORCHESTRATOR_MODEL`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, etc.).
+**Production scans:** configure models and secrets in `apps/agent-py` + root `.env.local` (`AGENT_PY_URL`, provider keys, etc.).
 
 **Deep harness env:** `GOOGLE_API_KEY` required; optional `ASST_ELITE_DEEP_MODEL` (default `gemini-2.5-flash`).
 
@@ -37,7 +37,7 @@ pnpm --filter @asst/solana-elite-auditor elite:deep -- /path/to/anchor/repo
 
 ## How this relates to the ARES whitepaper
 
-The IEEE-style ARES draft you maintain (multi-agent coordination, spatio-temporal memory, dataset/LoRA themes) is the **research story**; this folder is the **engineering surface**: orchestration in `@ares/engine`, optional **Deep Agents** shell for IDE workflows, and **assurance tools** (Anchor heuristics, RPC, secrets, posture, PDF).
+The IEEE-style ARES draft you maintain (multi-agent coordination, spatio-temporal memory, dataset/LoRA themes) is the **research story**; this folder is a **Deep Agents** engineering sketch — production orchestration lives in **`apps/agent-py`**.
 
 ## References (defensive / research)
 
@@ -57,7 +57,7 @@ The IEEE-style ARES draft you maintain (multi-agent coordination, spatio-tempora
 |----------|-------------|
 | [Hashlock AI Audit](https://aiaudit.hashlock.com/) | Upload / URL / GitHub triage; good for quick Solidity-oriented scans. |
 | [Trident Arena](https://tridentarena.xyz/#benchmarks) | Multi-agent Solana focus; benchmark-oriented marketing. |
-| **ARES / ASST** | **Repo-bound manifests**, merged SARIF lanes, `@ares/engine` tool contracts, optional **Deep Agents** harness, and integration with the rest of the ARES monorepo (CLI, web). |
+| **ARES / ASST** | **Repo-bound manifests**, merged SARIF lanes, **agent-py** tool contracts, optional **Deep Agents** harness, and integration with the rest of the ARES monorepo (web + chain-intake). |
 
 ## Benchmark framework (Trident-style)
 

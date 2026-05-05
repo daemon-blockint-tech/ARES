@@ -13,10 +13,17 @@ node_modules/
 dist/
 *.tsbuildinfo
 apps/web/.next/
+apps/agent-py/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
 
 # ─── Assurance runs & scan output (CI uploads these separately) ─
 /assurance/
 /scripts/copilot-scan-output.txt
+
+# ─── Large local datasets (use Git LFS or external storage if publishing) ─
+/dataset/
 
 # ─── Ad-hoc logs that slipped into the repo historically ──────
 test_api*.log

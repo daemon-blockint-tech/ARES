@@ -30,10 +30,15 @@ export default function ReportsPage() {
   const fetchReports = async () => {
     try {
       const res = await fetch("/api/reports");
-      const data = await res.json();
-      setReports(data);
+      const payload = await res.json();
+      const list =
+        payload?.ok === true && Array.isArray(payload?.data?.reports)
+          ? payload.data.reports
+          : [];
+      setReports(list);
     } catch (err) {
       console.error("Failed to fetch reports:", err);
+      setReports([]);
     } finally {
       setLoading(false);
     }

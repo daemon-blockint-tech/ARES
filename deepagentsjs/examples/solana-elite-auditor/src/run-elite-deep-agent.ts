@@ -15,7 +15,7 @@ async function main() {
   if (!process.env.GOOGLE_API_KEY) {
     console.error(
       "GOOGLE_API_KEY is required for elite:deep (ChatGoogleGenerativeAI). " +
-        "Or use elite:orchestrator with ASST_ORCHESTRATOR_MODEL / OpenRouter / other engine-supported providers.",
+        "For full scans use apps/agent-py (POST /v1/scan) with your orchestrator model env vars.",
     );
     process.exit(1);
   }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicOrchestrator } from "@/lib/engine-factory";
+import { agentPyPostJson, defaultRepoPayload } from "@/lib/agentpy-client";
 import { enforceRateLimit, requireApiKey } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -35,9 +35,11 @@ export async function GET(req: NextRequest) {
     try {
       await writeRaw(": sse-open\n\n");
 
-      const orchestrator = createPublicOrchestrator();
-      await orchestrator.init();
-      const history = await orchestrator.getRecentHistory(20);
+      const hist = await agentPyPostJson<{ messages: { role: string; content: string; timestamp: string }[] }>(
+        "/v1/history",
+        { limit: 20, ...defaultRepoPayload() },
+      );
+      const history = hist.messages || [];
       const chronological = [...history].reverse();
 
       for (const msg of chronological) {

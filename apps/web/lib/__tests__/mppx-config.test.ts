@@ -13,7 +13,7 @@ import {
 } from "../payments/mppx.js";
 
 // ─────────────────────────────────────────────────────────────
-// engine-factory: sanitizeModelOption (audit fix #001 — SSRF)
+// sanitize-model: sanitizeModelOption (audit fix #001 — SSRF)
 // ─────────────────────────────────────────────────────────────
 
 test("sanitizeModelOption: returns undefined for non-strings", () => {

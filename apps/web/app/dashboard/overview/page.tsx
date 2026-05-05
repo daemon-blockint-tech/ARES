@@ -25,6 +25,7 @@ import { useState, useEffect } from "react";
 import { Detection, Target, Agent } from "@/lib/ares/mock-data";
 import { safeResponseJson } from "@/lib/safe-response-json";
 import { cn } from "@/lib/utils";
+import { FindingFeedback } from "@/components/finding-feedback";
 
 export default function OverviewPage() {
   const [findings, setFindings] = useState<any[]>([]);
@@ -227,8 +228,9 @@ export default function OverviewPage() {
                   <p className="text-[14px] font-semibold text-foreground truncate">{finding.rule}</p>
                   <p className="text-[12px] text-muted-foreground truncate font-sans">{finding.message}</p>
                 </div>
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                   <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-2 transition-opacity">
+                  <FindingFeedback runId="dashboard-overview" findingId={`${finding.rule}-${idx}`} />
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
                 </div>
               </div>
             ))}

@@ -29,18 +29,19 @@ cp .env.example .env.local
 # fill in GOOGLE_API_KEY (or OPENROUTER_API_KEY, or neither if using Ollama)
 ```
 
-Sanity check the engine:
+Sanity check:
 
 ```bash
-pnpm --filter @ares/engine build
 pnpm --filter @asst/web test
+cd apps/agent-py && uv run pytest -q
 ```
 
 ## 2. Workspace structure — recap
 
-- `packages/engine/` — the engine. Almost every change lands here.
-- `apps/<surface>/` — deployable surfaces. They must not reimplement engine
-  logic; they adapt the engine to their environment (TUI, HTTP, MCP, webhook).
+- `apps/agent-py/` — Hermes plugin + FastAPI + Arq worker; **orchestration and
+  assurance tools** for chat and scans.
+- `apps/<surface>/` — deployable surfaces. They must not reimplement agent
+  logic; they proxy to `agent-py` or add product-only code (auth, billing, UI).
 - `.agents/skills/` — the canonical skills directory. **Do not** duplicate
   skills into `.claude/`, `.cursor/`, `.codebuddy/`, etc.
 
@@ -51,9 +52,8 @@ pnpm --filter @asst/web test
 | Build everything       | `pnpm -r build`                                              |
 | Typecheck (workspaces) | `pnpm typecheck`                                             |
 | Web dev server         | `pnpm --filter @asst/web dev`                                |
-| MCP server dev         | `pnpm --filter @asst/mcp-server dev`                         |
 | Chain intake           | `pnpm --filter @asst/chain-intake start`                     |
-| Engine typecheck       | `pnpm --filter @ares/engine build`                           |
+| Agent-py tests         | `cd apps/agent-py && uv run pytest -q`                      |
 | Web tests              | `pnpm --filter @asst/web test`                               |
 
 ## 4. Code conventions
@@ -74,23 +74,19 @@ pnpm --filter @asst/web test
 
 ### Add a new assurance tool
 
-1. Create `packages/engine/src/assurance-tools/my-tool.ts` exporting a
-   LangChain `tool(...)`.
-2. Export it from `packages/engine/src/assurance-tools/index.ts`.
-3. Add an entry in `packages/engine/src/assurance-tools/README.md`.
-4. If the tool is **read-only**, it's already available to web + MCP.
-5. If it's **mutating**, follow the pattern in `tools/mutating.ts`:
-   accept a `permissionFn`, return refusal text when denied.
-6. To expose on MCP: register in `apps/mcp-server/src/server.ts` via
-   `wrapTool("asst_my_tool", "…", schema, myTool)`.
+1. Implement the tool in `apps/agent-py/src/ares_plugin/tools/assurance.py`
+   (or a sibling module) and register it with the Hermes plugin context.
+2. Mirror the JSON schema in `openai_tools_definitions()` when the tool is
+   exposed to the LiteLLM tool loop.
+3. Document behavior in `apps/agent-py/README.md` if operators need new env
+   vars or CLIs.
 
 ### Add a new sub-agent
 
-1. Add a config to `SUB_AGENT_CONFIGS` in
-   `packages/engine/src/sub-agents.ts`: `name`, `description`,
-   `systemPrompt`, `relevantSkills`, `toolNames`.
-2. The orchestrator picks it up automatically (it iterates the registry).
-3. Document the agent's purpose in `packages/engine/README.md`.
+1. Extend `apps/agent-py/src/ares_plugin/sub_agents.py` (or the orchestrator
+   routing table) with prompt, tool allowlist, and skills references.
+2. Keep public manifests in `apps/web/lib/sub-agent-public-manifest.ts` in sync
+   for `/api/agents`.
 
 ### Add a new skill
 
@@ -103,15 +99,16 @@ pnpm --filter @asst/web test
 
 ### Add a new model provider
 
-1. Extend the switch in `packages/engine/src/config/model-factory.ts`.
-2. Add the required `OPENAI_API_KEY`-style env var.
-3. Document in `packages/engine/README.md` and `apps/web/README.md`.
+1. Extend `apps/agent-py/src/ares_plugin/llm.py` (LiteLLM routing) and defaults
+   in `apps/agent-py/src/ares_plugin/config.py`.
+2. Add the required provider API key to `.env.example`.
+3. Document in `apps/agent-py/README.md` and `apps/web/README.md`.
 
 ### Add a new web API route
 
 1. Create `apps/web/app/api/<name>/route.ts`.
-2. Import `createPublicOrchestrator` from `@/lib/engine-factory` — **never**
-   `new Orchestrator(...)` directly.
+2. Prefer thin proxies to `apps/agent-py` via `agentPyPostJson` from
+   `@/lib/agentpy-client` for agent-adjacent behavior.
 3. Validate input with Zod.
 4. Return `NextResponse.json(...)` or a stream.
 

@@ -2,7 +2,7 @@
  * SSRF mitigation for the user-supplied `model` parameter on /api/chat and
  * /api/scan (audit fix #001).
  *
- * The engine's model parser accepts `<provider>:<model>@<baseUrl>`. Without
+ * The orchestrator model id accepts `<provider>:<model>@<baseUrl>`. Without
  * sanitization an attacker could supply
  *   `openai:gpt-4o-mini@https://attacker.example/v1`
  * and our server would happily forward its OpenAI API key (Authorization
@@ -13,14 +13,14 @@
  * allowlist (`ASST_MODEL_ALLOWLIST=google:gemini-2.5-flash, openai:gpt-4o-mini`)
  * lets operators pin the public surface to exactly the models they pay for.
  *
- * Returns `undefined` when the input is missing or invalid — the engine then
- * falls back to its server-side default. Returning `undefined` instead of
+ * Returns `undefined` when the input is missing or invalid — the agent service
+ * then falls back to its server-side default. Returning `undefined` instead of
  * throwing is intentional: a malicious or mistyped `model` should silently
  * degrade, not DoS the route.
  *
  * This file is intentionally dependency-free so it can be unit tested without
- * pulling in `@ares/engine`'s heavy module graph (LangChain, better-sqlite3,
- * etc.). `lib/engine-factory.ts` re-exports the function for the runtime.
+ * pulling in heavy server-only dependencies. Import from ``@/lib/auth/sanitize-model``
+ * in API routes.
  */
 
 const MAX_LEN = 200;

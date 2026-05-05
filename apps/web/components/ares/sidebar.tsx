@@ -22,6 +22,7 @@ import { Logo, LogoMark } from "./logo";
 import { StatusBadge } from "./status-badge";
 
 const navItems = [
+  { name: "Console", href: "/dashboard/console", icon: Terminal },
   { name: "Overview", href: "/dashboard/overview", icon: LayoutDashboard },
   { name: "Targets", href: "/dashboard/targets", icon: Target },
   { name: "Detections", href: "/dashboard/detections", icon: ShieldAlert },
@@ -29,7 +30,6 @@ const navItems = [
   { name: "Agents", href: "/dashboard/agents", icon: Activity },
   { name: "Reports", href: "/dashboard/reports", icon: FileText },
   { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
-  { name: "Console", href: "/dashboard/console", icon: Terminal },
 ];
 
 export function Sidebar() {

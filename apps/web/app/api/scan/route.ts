@@ -25,8 +25,9 @@ import {
 } from "@/lib/api";
 import { readWalletSession } from "@/lib/auth/read-session";
 import { consumeWalletFreeScan } from "@/lib/billing/quota";
+import { agentPyPostJson, defaultRepoPayload } from "@/lib/agentpy-client";
 import { getPool } from "@/lib/db/pool";
-import { createPublicOrchestrator, sanitizeModelOption } from "@/lib/engine-factory";
+import { sanitizeModelOption } from "@/lib/auth/sanitize-model";
 import { getMppx, scanPaymentEntries } from "@/lib/payments/mppx";
 import { enforceWalletRateLimit } from "@/lib/ratelimit/wallet";
 
@@ -50,19 +51,20 @@ function validateTarget(raw: string | undefined): string | null {
   return raw;
 }
 
-function fireAndForgetScan(target: string, model: string | undefined): void {
-  // Intentional fire-and-forget. Scan progress is observable via the engine's
-  // own status callback in dev and via downstream telemetry in prod.
-  const ares = createPublicOrchestrator({ model });
-  ares
-    .runFullScan((agent: string, status: string) => {
-      if (process.env.NODE_ENV !== "production") {
-        console.log(`[scan ${target}] ${agent}: ${status}`);
-      }
-    })
-    .catch((err) => {
-      console.error("[/api/scan] background scan failed:", err);
+async function enqueueScan(
+  target: string,
+  model: string | undefined,
+): Promise<{ run_id: string } | null> {
+  try {
+    return await agentPyPostJson<{ run_id: string }>("/v1/scan", {
+      target,
+      model,
+      ...defaultRepoPayload(),
     });
+  } catch (err) {
+    console.error("[/api/scan] agent-py enqueue failed:", err);
+    return null;
+  }
 }
 
 export async function POST(req: Request) {
@@ -101,10 +103,11 @@ export async function POST(req: Request) {
   const ip = getClientIp(req);
 
   if (operator) {
-    fireAndForgetScan(target, model);
+    const q = await enqueueScan(target, model);
     return apiSuccess(requestId, {
       status: "queued",
       target,
+      run_id: q?.run_id ?? null,
       timestamp: new Date().toISOString(),
       billing: "operator",
     });
@@ -135,10 +138,11 @@ export async function POST(req: Request) {
   // Try free monthly quota first — paid customers and free-tier alike.
   const freeOk = await consumeWalletFreeScan(pool, session.sub, ip);
   if (freeOk) {
-    fireAndForgetScan(target, model);
+    const q = await enqueueScan(target, model);
     return apiSuccess(requestId, {
       status: "queued",
       target,
+      run_id: q?.run_id ?? null,
       timestamp: new Date().toISOString(),
       billing: "free_wallet",
     });
@@ -165,10 +169,11 @@ export async function POST(req: Request) {
     return result.challenge;
   }
 
-  fireAndForgetScan(target, model);
+  const q = await enqueueScan(target, model);
   const ok = apiSuccess(requestId, {
     status: "queued",
     target,
+    run_id: q?.run_id ?? null,
     timestamp: new Date().toISOString(),
     billing: "mppx_charge",
   });
