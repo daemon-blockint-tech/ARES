@@ -18,7 +18,7 @@ dependencies = [
   "redis>=5.2,<6",
   "arq>=0.26,<1",
   "prometheus-client>=0.21,<1",
-  "python-multipart>=0.0.20,<1",
+  "python-multipart>=0.0.31,<1",
   "supabase>=2.11,<3",
   # Hermes release tag v2026.4.30 ships pyproject version 0.12.0 (no git tag v0.12.0).
   "hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git@v2026.4.30",
