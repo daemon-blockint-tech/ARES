@@ -14,7 +14,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "litellm>=1.60,<2",
   "pydantic>=2.12,<3",
-  "pydantic-settings>=2.7,<3",
+  "pydantic-settings>=2.14.2,<3",
   "redis>=5.2,<6",
   "arq>=0.26,<1",
   "prometheus-client>=0.21,<1",
@@ -44,6 +44,12 @@ ares = "ares_plugin.plugin"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv]
+constraint-dependencies = [
+  "pyjwt>=2.13.0",
+  "msgpack>=1.2.1",
+]
 
 [tool.ruff]
 line-length = 100
