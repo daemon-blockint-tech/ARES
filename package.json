@@ -13,7 +13,12 @@
       "core-js",
       "esbuild",
       "sharp"
-    ]
+    ],
+    "overrides": {
+      "protobufjs": "^7.6.5",
+      "ua-parser-js": "^2.0.10",
+      "@babel/core": "^7.29.7"
+    }
   },
   "devDependencies": {
     "@types/node": "^25.6.0"
