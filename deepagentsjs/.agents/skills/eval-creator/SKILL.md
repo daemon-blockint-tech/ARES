@@ -443,7 +443,6 @@ sandbox providers:
 | Modal | `@deepagents/modal` | Remote containers, GPU support |
 | Daytona | `@deepagents/daytona` | Cloud dev environments |
 | Deno | `@deepagents/deno` | Lightweight local sandboxes |
-| Node VFS | `@deepagents/node-vfs` | In-process virtual filesystem + shell |
 
 Pass the sandbox via `extend({ backend })`. Manage its lifecycle with
 `beforeAll` / `afterAll` (suite-level) or `beforeEach` / `afterEach`
