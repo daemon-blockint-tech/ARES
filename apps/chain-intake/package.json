@@ -16,7 +16,7 @@
     "migrate": "node --import tsx scripts/migrate.ts"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.7",
+    "@hono/node-server": "^2.0.10",
     "hono": "^4.12.25",
     "pg": "^8.16.3",
     "tsx": "^4.21.0"
