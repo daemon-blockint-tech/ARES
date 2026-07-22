@@ -17,7 +17,9 @@
     "overrides": {
       "protobufjs": "^7.6.5",
       "ua-parser-js": "^2.0.10",
-      "@babel/core": "^7.29.7"
+      "@babel/core": "^7.29.7",
+      "shell-quote": "^1.10.0",
+      "body-parser": "^2.3.0"
     }
   },
   "devDependencies": {
